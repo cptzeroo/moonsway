@@ -16,9 +16,13 @@ dist-ssr
 
 # Tauri
 src-tauri/target/
+src-tauri/binaries/
 
 # Tauri generated schemas
 src-tauri/gen/
+
+# PocketBase data
+pb_data/
 
 # Editor directories and files
 .vscode/*

@@ -1,4 +1,11 @@
+import { useEffect } from "react";
+import { ensureCollections } from "@/lib/pb-setup";
+
 function App() {
+  useEffect(() => {
+    ensureCollections();
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       {/* Sidebar + Main Content */}
