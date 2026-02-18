@@ -1,0 +1,210 @@
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router";
+import { ArrowLeft, Heart, Play } from "lucide-react";
+import { getArtist, getCoverUrl, getArtistPictureUrl } from "@/lib/api/music-api";
+import { TrackList } from "@/components/track-list";
+import { usePlayerStore } from "@/stores/player-store";
+import { useLibraryStore } from "@/stores/library-store";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { Album, ArtistMinified, Track } from "@/types/music";
+
+interface ArtistDetail extends ArtistMinified {
+  albums: Album[];
+  tracks: Track[];
+}
+
+export function ArtistPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [artist, setArtist] = useState<ArtistDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const playTrack = usePlayerStore((s) => s.playTrack);
+  const playQueue = usePlayerStore((s) => s.playQueue);
+  const toggleFavoriteArtist = useLibraryStore((s) => s.toggleFavoriteArtist);
+  const isArtistFavorited = useLibraryStore((s) => s.isArtistFavorited);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    setIsLoading(true);
+    setError(null);
+
+    getArtist(id)
+      .then((result: ArtistDetail) => {
+        if (cancelled) return;
+        setArtist(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[Artist] Failed to load:", err);
+        setError("Failed to load artist");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const handlePlayTrack = useCallback(
+    (track: Track, _index: number) => {
+      if (artist) {
+        playTrack(track, artist.tracks);
+      }
+    },
+    [playTrack, artist]
+  );
+
+  const handlePlayAll = useCallback(() => {
+    if (artist && artist.tracks.length > 0) {
+      playQueue(artist.tracks, 0);
+    }
+  }, [playQueue, artist]);
+
+  if (isLoading) return <ArtistSkeleton />;
+
+  if (error || !artist) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+        <p className="text-sm text-muted-foreground">{error ?? "Artist not found"}</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="text-sm text-primary hover:underline"
+        >
+          Go back
+        </button>
+      </div>
+    );
+  }
+
+  const pictureUrl = artist.picture
+    ? getArtistPictureUrl(artist.picture, "640")
+    : "";
+
+  return (
+    <div className="flex flex-1 flex-col">
+      {/* Header */}
+      <div className="relative flex items-end gap-6 p-6 pb-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="absolute left-6 top-6 rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+
+        {pictureUrl ? (
+          <img
+            src={pictureUrl}
+            alt=""
+            className="size-40 shrink-0 rounded-full object-cover shadow-lg"
+          />
+        ) : (
+          <div className="size-40 shrink-0 rounded-full bg-muted" />
+        )}
+
+        <div className="flex min-w-0 flex-col gap-2">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Artist
+          </span>
+          <h1 className="text-3xl font-bold tracking-tight">{artist.name}</h1>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-3 px-6 pb-2">
+        {artist.tracks.length > 0 && (
+          <button
+            onClick={handlePlayAll}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Play className="size-4" />
+            Play
+          </button>
+        )}
+        <button
+          onClick={() => toggleFavoriteArtist(artist)}
+          className="rounded-full p-2 transition-colors hover:bg-accent"
+        >
+          <Heart
+            className={cn(
+              "size-5 transition-colors",
+              isArtistFavorited(artist.id)
+                ? "fill-primary text-primary"
+                : "text-muted-foreground"
+            )}
+          />
+        </button>
+      </div>
+
+      {/* Top tracks */}
+      {artist.tracks.length > 0 && (
+        <section className="px-2 pb-6">
+          <h2 className="px-4 pb-3 pt-4 text-lg font-semibold">Popular Tracks</h2>
+          <TrackList tracks={artist.tracks} onPlay={handlePlayTrack} />
+        </section>
+      )}
+
+      {/* Albums */}
+      {artist.albums.length > 0 && (
+        <section className="px-6 pb-8">
+          <h2 className="pb-4 text-lg font-semibold">Discography</h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4">
+            {artist.albums.map((album) => {
+              const coverUrl = album.cover ? getCoverUrl(album.cover, "320") : "";
+              return (
+                <Link
+                  key={album.id}
+                  to={`/album/${album.id}`}
+                  className="group flex flex-col gap-2 rounded-lg p-3 transition-colors hover:bg-accent/50"
+                >
+                  {coverUrl ? (
+                    <img
+                      src={coverUrl}
+                      alt=""
+                      className="aspect-square w-full rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="aspect-square w-full rounded-md bg-muted" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{album.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {album.releaseDate
+                        ? album.releaseDate.substring(0, 4)
+                        : album.type ?? "Album"}
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ArtistSkeleton() {
+  return (
+    <div className="flex flex-1 flex-col p-6">
+      <div className="flex items-end gap-6">
+        <Skeleton className="size-40 rounded-full" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </div>
+      <div className="mt-8 flex flex-col gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="h-10 w-full rounded-md" />
+        ))}
+      </div>
+    </div>
+  );
+}

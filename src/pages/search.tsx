@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { Search as SearchIcon, Loader2, Music, Disc3, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -183,8 +184,9 @@ function AlbumGrid({ albums }: { albums: Album[] }) {
       {albums.map((album) => {
         const coverUrl = album.cover ? getCoverUrl(album.cover, "320") : "";
         return (
-          <div
+          <Link
             key={album.id}
+            to={`/album/${album.id}`}
             className="group flex flex-col gap-2 rounded-lg p-3 transition-colors hover:bg-accent/50"
           >
             {coverUrl ? (
@@ -202,7 +204,7 @@ function AlbumGrid({ albums }: { albums: Album[] }) {
                 {album.artist?.name ?? "Unknown Artist"}
               </p>
             </div>
-          </div>
+          </Link>
         );
       })}
     </div>
@@ -217,8 +219,9 @@ function ArtistGrid({ artists }: { artists: ArtistMinified[] }) {
           ? getArtistPictureUrl(artist.picture, "320")
           : "";
         return (
-          <div
+          <Link
             key={artist.id}
+            to={`/artist/${artist.id}`}
             className="group flex flex-col items-center gap-2 rounded-lg p-3 transition-colors hover:bg-accent/50"
           >
             {pictureUrl ? (
@@ -231,7 +234,7 @@ function ArtistGrid({ artists }: { artists: ArtistMinified[] }) {
               <div className="size-28 rounded-full bg-muted" />
             )}
             <p className="truncate text-sm font-medium">{artist.name}</p>
-          </div>
+          </Link>
         );
       })}
     </div>

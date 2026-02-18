@@ -1,10 +1,12 @@
-import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router";
 import { Home, Search, Library } from "lucide-react";
-import { ensureCollections } from "@/lib/pb-setup";
 import { PlayerBar } from "@/components/player-bar";
 import { HomePage } from "@/pages/home";
 import { SearchPage } from "@/pages/search";
+import { AlbumPage } from "@/pages/album";
+import { ArtistPage } from "@/pages/artist";
+import { PlaylistPage } from "@/pages/playlist";
+import { LibraryPage } from "@/pages/library";
 import { cn } from "@/lib/utils";
 
 function NavItem({
@@ -35,10 +37,6 @@ function NavItem({
 }
 
 function AppLayout() {
-  useEffect(() => {
-    ensureCollections();
-  }, []);
-
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       {/* Sidebar + Main Content */}
@@ -58,6 +56,10 @@ function AppLayout() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/album/:id" element={<AlbumPage />} />
+            <Route path="/artist/:id" element={<ArtistPage />} />
+            <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/library" element={<LibraryPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

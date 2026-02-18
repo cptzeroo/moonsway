@@ -8,6 +8,7 @@
 
 import { create } from "zustand";
 import { getStreamUrl, getCoverUrl } from "@/lib/api/music-api";
+import { useLibraryStore } from "./library-store";
 import type { Track, StreamQuality } from "@/types/music";
 
 // -- Types --
@@ -94,7 +95,8 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
     async function loadAndPlay(track: Track): Promise<void> {
       set({ isLoading: true, currentTrack: track, streamUrl: null });
 
-      // Update document title
+      useLibraryStore.getState().addToHistory(track);
+
       document.title = `${track.title} - ${track.artist.name} | Moonsway`;
 
       // Update Media Session
