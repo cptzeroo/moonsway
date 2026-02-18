@@ -3,6 +3,19 @@
  * Minified shapes stored in PocketBase and IndexedDB.
  */
 
+// -- Stream Quality --
+
+export type StreamQuality = "HI_RES_LOSSLESS" | "LOSSLESS" | "HIGH" | "LOW";
+
+// -- Search Results --
+
+export interface SearchResult<T> {
+  items: T[];
+  limit: number;
+  offset: number;
+  totalNumberOfItems: number;
+}
+
 // -- Artists --
 
 export interface ArtistMinified {
