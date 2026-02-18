@@ -7,6 +7,7 @@ import { AlbumPage } from "@/pages/album";
 import { ArtistPage } from "@/pages/artist";
 import { PlaylistPage } from "@/pages/playlist";
 import { LibraryPage } from "@/pages/library";
+import logoSrc from "@/assets/icons/moonsway.png";
 import { cn } from "@/lib/utils";
 
 function NavItem({
@@ -43,7 +44,9 @@ function AppLayout() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4">
-          <h1 className="mb-6 text-xl font-bold tracking-tight">Moonsway</h1>
+          <div className="mb-6 flex items-center gap-2">
+            <img src={logoSrc} alt="Moonsway" className="size-8" />
+          </div>
           <nav className="flex flex-col gap-1">
             <NavItem to="/" icon={Home} label="Home" />
             <NavItem to="/search" icon={Search} label="Search" />
