@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Play,
   Pause,
@@ -37,6 +38,8 @@ export function PlayerBar() {
   const toggleMute = usePlayerStore((s) => s.toggleMute);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubTime, setScrubTime] = useState(0);
 
   const coverUrl = currentTrack?.album?.cover
     ? getCoverUrl(currentTrack.album.cover, "80")
@@ -49,40 +52,41 @@ export function PlayerBar() {
       : Volume2;
 
   const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
+  const progressValue = isScrubbing ? scrubTime : currentTime;
 
   return (
-    <footer className="flex h-20 items-center border-t border-border bg-card px-4">
+    <footer className="flex h-24 items-center border-t border-border/70 bg-card/88 px-5 shadow-[0_-3px_10px_rgba(0,0,0,0.18)]">
       {/* Left: track info */}
       <div className="flex w-1/3 min-w-0 items-center gap-3">
         {coverUrl ? (
           <img
             src={coverUrl}
             alt=""
-            className="h-12 w-12 shrink-0 rounded object-cover"
+            className="h-14 w-14 shrink-0 rounded-md object-cover"
           />
         ) : (
-          <div className="h-12 w-12 shrink-0 rounded bg-muted" />
+          <div className="h-14 w-14 shrink-0 rounded-md bg-muted" />
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
+          <p className="truncate text-base font-semibold">
             {currentTrack?.title ?? "No track playing"}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-sm text-muted-foreground">
             {currentTrack?.artist?.name ?? "--"}
           </p>
         </div>
       </div>
 
       {/* Center: controls + progress */}
-      <div className="flex w-1/3 flex-col items-center gap-0.5">
+      <div className="flex w-1/3 flex-col items-center gap-1.5">
         {/* Transport controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
             size="icon-xs"
             onClick={toggleShuffle}
             className={cn(
-              "text-muted-foreground hover:text-foreground",
+              "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               shuffleActive && "text-primary"
             )}
           >
@@ -93,24 +97,24 @@ export function PlayerBar() {
             variant="ghost"
             size="icon-sm"
             onClick={playPrev}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:bg-accent/70 hover:text-foreground"
           >
             <SkipBack className="size-4" />
           </Button>
 
           <Button
             variant="default"
-            size="icon-sm"
-            className="rounded-full"
+            size="icon-lg"
+            className="rounded-full shadow-sm"
             onClick={togglePlayPause}
             disabled={!currentTrack && !isLoading}
           >
             {isLoading ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Loader2 className="size-5 animate-spin" />
             ) : isPlaying ? (
-              <Pause className="size-4" />
+              <Pause className="size-5 fill-current stroke-none" />
             ) : (
-              <Play className="size-4" />
+              <Play className="size-5 fill-current stroke-none" />
             )}
           </Button>
 
@@ -118,7 +122,7 @@ export function PlayerBar() {
             variant="ghost"
             size="icon-sm"
             onClick={playNext}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:bg-accent/70 hover:text-foreground"
           >
             <SkipForward className="size-4" />
           </Button>
@@ -128,7 +132,7 @@ export function PlayerBar() {
             size="icon-xs"
             onClick={cycleRepeat}
             className={cn(
-              "text-muted-foreground hover:text-foreground",
+              "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               repeatMode !== "off" && "text-primary"
             )}
           >
@@ -137,19 +141,29 @@ export function PlayerBar() {
         </div>
 
         {/* Progress bar */}
-        <div className="flex w-full max-w-md items-center gap-2">
-          <span className="w-10 text-right text-[10px] tabular-nums text-muted-foreground">
+        <div className="flex w-full max-w-lg items-center gap-2.5">
+          <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
             {formatTime(currentTime)}
           </span>
           <Slider
             min={0}
             max={duration || 1}
             step={0.1}
-            value={[currentTime]}
-            onValueChange={([val]) => seek(val)}
-            className="flex-1"
+            value={[progressValue]}
+            onPointerDownCapture={() => {
+              setIsScrubbing(true);
+              setScrubTime(currentTime);
+            }}
+            onValueChange={([val]) => {
+              setScrubTime(val ?? 0);
+            }}
+            onValueCommit={([val]) => {
+              setIsScrubbing(false);
+              seek(val ?? 0);
+            }}
+            className="flex-1 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:bg-muted/80"
           />
-          <span className="w-10 text-[10px] tabular-nums text-muted-foreground">
+          <span className="w-10 text-xs tabular-nums text-muted-foreground">
             {formatTime(duration)}
           </span>
         </div>
@@ -161,9 +175,9 @@ export function PlayerBar() {
           variant="ghost"
           size="icon-xs"
           onClick={toggleMute}
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:bg-accent/70 hover:text-foreground"
         >
-          <VolumeIcon className="size-3.5" />
+          <VolumeIcon className="size-4" />
         </Button>
         <Slider
           min={0}
@@ -171,7 +185,7 @@ export function PlayerBar() {
           step={0.01}
           value={[isMuted ? 0 : volume]}
           onValueChange={([val]) => setVolume(val)}
-          className="w-24"
+          className="w-32 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:bg-muted/80"
         />
       </div>
     </footer>

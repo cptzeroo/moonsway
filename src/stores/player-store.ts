@@ -15,6 +15,18 @@ import type { Track, StreamQuality } from "@/types/music";
 
 export type RepeatMode = "off" | "all" | "one";
 
+interface PersistedPlayerState {
+  version: number;
+  currentTrackId: string | null;
+  queueTrackIds: string[];
+  currentIndex: number;
+  currentTime: number;
+  volume: number;
+  isMuted: boolean;
+  quality: StreamQuality;
+  repeatMode: RepeatMode;
+}
+
 interface PlayerState {
   // Queue
   queue: Track[];
@@ -81,10 +93,130 @@ function shuffleArray<T>(arr: T[]): T[] {
   return shuffled;
 }
 
+const PLAYER_STORAGE_KEY = "moonsway-player-state";
+const CURRENT_VERSION = 1;
+const MAX_QUEUE_SIZE = 100;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function readPersistedPlayerState(): PersistedPlayerState | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem(PLAYER_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PersistedPlayerState>;
+
+    // Migration: discard old versions
+    if (!parsed.version || parsed.version < CURRENT_VERSION) {
+      localStorage.removeItem(PLAYER_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      version: CURRENT_VERSION,
+      currentTrackId: typeof parsed.currentTrackId === "string" ? parsed.currentTrackId : null,
+      queueTrackIds: Array.isArray(parsed.queueTrackIds) ? parsed.queueTrackIds : [],
+      currentIndex:
+        typeof parsed.currentIndex === "number" ? parsed.currentIndex : -1,
+      currentTime: typeof parsed.currentTime === "number" ? parsed.currentTime : 0,
+      volume:
+        typeof parsed.volume === "number" ? clamp(parsed.volume, 0, 1) : 1,
+      isMuted: Boolean(parsed.isMuted),
+      quality:
+        parsed.quality === "HI_RES_LOSSLESS" ||
+        parsed.quality === "LOSSLESS" ||
+        parsed.quality === "HIGH" ||
+        parsed.quality === "LOW"
+          ? parsed.quality
+          : "HI_RES_LOSSLESS",
+      repeatMode:
+        parsed.repeatMode === "off" ||
+        parsed.repeatMode === "all" ||
+        parsed.repeatMode === "one"
+          ? parsed.repeatMode
+          : "off",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedPlayerState(state: PersistedPlayerState): void {
+  if (typeof window === "undefined") return;
+  try {
+    const limitedState: PersistedPlayerState = {
+      ...state,
+      queueTrackIds: state.queueTrackIds.slice(0, MAX_QUEUE_SIZE),
+    };
+    localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(limitedState));
+  } catch {
+    // Ignore storage failures (private mode/quota)
+  }
+}
+
 // -- Store --
 
 export const usePlayerStore = create<PlayerState & PlayerActions>()(
   (set, get) => {
+    const persisted = readPersistedPlayerState();
+    
+    // Note: We don't hydrate tracks from IDs on init to avoid blocking startup.
+    // The app will start with empty state, and users can resume by playing a track.
+    // Future enhancement: fetch tracks by IDs in background after hydration.
+    
+    const hydratedVolume = persisted?.volume ?? 1;
+    const hydratedMuted = persisted?.isMuted ?? false;
+    const hydratedQuality = persisted?.quality ?? "HI_RES_LOSSLESS";
+    const hydratedRepeatMode = persisted?.repeatMode ?? "off";
+
+    audio.volume = hydratedMuted ? 0 : hydratedVolume;
+
+    let pendingPersist: ReturnType<typeof setTimeout> | null = null;
+
+    function persistPlayerState(force = false): void {
+      if (force) {
+        if (pendingPersist) {
+          clearTimeout(pendingPersist);
+          pendingPersist = null;
+        }
+        const state = get();
+        writePersistedPlayerState({
+          version: CURRENT_VERSION,
+          currentTrackId: state.currentTrack?.id ?? null,
+          queueTrackIds: state.queue.map((t) => t.id),
+          currentIndex: state.currentIndex,
+          currentTime: state.currentTime,
+          volume: state.volume,
+          isMuted: state.isMuted,
+          quality: state.quality,
+          repeatMode: state.repeatMode,
+        });
+        return;
+      }
+
+      if (pendingPersist) return;
+
+      pendingPersist = setTimeout(() => {
+        const state = get();
+        writePersistedPlayerState({
+          version: CURRENT_VERSION,
+          currentTrackId: state.currentTrack?.id ?? null,
+          queueTrackIds: state.queue.map((t) => t.id),
+          currentIndex: state.currentIndex,
+          currentTime: state.currentTime,
+          volume: state.volume,
+          isMuted: state.isMuted,
+          quality: state.quality,
+          repeatMode: state.repeatMode,
+        });
+        pendingPersist = null;
+      }, 1000);
+    }
+
     // -- Internal helpers --
 
     function activeQueue(): Track[] {
@@ -92,8 +224,14 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
       return state.shuffleActive ? state.shuffledQueue : state.queue;
     }
 
-    async function loadAndPlay(track: Track): Promise<void> {
-      set({ isLoading: true, currentTrack: track, streamUrl: null });
+    async function loadAndPlay(track: Track, startAt = 0): Promise<void> {
+      set({
+        isLoading: true,
+        currentTrack: track,
+        streamUrl: null,
+        currentTime: Math.max(0, startAt),
+      });
+      persistPlayerState(true);
 
       useLibraryStore.getState().addToHistory(track);
 
@@ -137,11 +275,22 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
           audio.addEventListener("error", onError, { once: true });
         });
 
+        if (startAt > 0) {
+          const safeStartAt =
+            Number.isFinite(audio.duration) && audio.duration > 0
+              ? clamp(startAt, 0, Math.max(audio.duration - 0.25, 0))
+              : Math.max(0, startAt);
+          audio.currentTime = safeStartAt;
+          set({ currentTime: safeStartAt });
+        }
+
         await audio.play();
         set({ isPlaying: true, isLoading: false });
+        persistPlayerState(true);
       } catch (error) {
         console.error("[Player] Failed to play track:", error);
         set({ isLoading: false, isPlaying: false });
+        persistPlayerState(true);
 
         // Try fallback to LOSSLESS if hi-res failed
         const state = get();
@@ -150,8 +299,13 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
             const url = await getStreamUrl(track.id, "LOSSLESS");
             audio.src = url;
             set({ streamUrl: url });
+            if (startAt > 0) {
+              audio.currentTime = Math.max(0, startAt);
+              set({ currentTime: Math.max(0, startAt) });
+            }
             await audio.play();
             set({ isPlaying: true });
+            persistPlayerState(true);
           } catch {
             console.error("[Player] Fallback to LOSSLESS also failed");
           }
@@ -163,6 +317,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
 
     audio.addEventListener("timeupdate", () => {
       set({ currentTime: audio.currentTime });
+      // Don't persist on timeupdate - too frequent, let other events handle it
     });
 
     audio.addEventListener("loadedmetadata", () => {
@@ -179,6 +334,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
 
     audio.addEventListener("pause", () => {
       set({ isPlaying: false });
+      persistPlayerState(true); // Persist position when pausing
     });
 
     // -- Media Session controls --
@@ -193,6 +349,20 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
       });
     }
 
+    if (typeof window !== "undefined") {
+      // More reliable than beforeunload
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          persistPlayerState(true);
+        }
+      });
+
+      // Fallback for older browsers
+      window.addEventListener("beforeunload", () => {
+        persistPlayerState(true);
+      });
+    }
+
     // -- Initial state --
 
     return {
@@ -201,7 +371,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
       originalQueue: [],
       currentIndex: -1,
       shuffleActive: false,
-      repeatMode: "off",
+      repeatMode: hydratedRepeatMode,
 
       currentTrack: null,
       streamUrl: null,
@@ -211,10 +381,10 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
       duration: 0,
       currentTime: 0,
 
-      volume: 1,
-      isMuted: false,
+      volume: hydratedVolume,
+      isMuted: hydratedMuted,
 
-      quality: "HI_RES_LOSSLESS",
+      quality: hydratedQuality,
 
       // -- Actions --
 
@@ -229,6 +399,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
           shuffleActive: false,
           currentIndex: index >= 0 ? index : 0,
         });
+        persistPlayerState(true);
 
         await loadAndPlay(track);
       },
@@ -244,14 +415,21 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
           shuffleActive: false,
           currentIndex: idx,
         });
+        persistPlayerState(true);
 
         await loadAndPlay(tracks[idx]);
       },
 
       togglePlayPause() {
+        const state = get();
+        if (!audio.src && state.currentTrack) {
+          void loadAndPlay(state.currentTrack, state.currentTime);
+          return;
+        }
+
         if (audio.src) {
           if (audio.paused) {
-            audio.play();
+            void audio.play();
           } else {
             audio.pause();
           }
@@ -280,12 +458,14 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
             audio.pause();
             audio.currentTime = 0;
             document.title = "Moonsway";
+            persistPlayerState(true);
             return;
           }
         }
 
         set({ currentIndex: nextIndex });
-        loadAndPlay(q[nextIndex]);
+        persistPlayerState(true);
+        void loadAndPlay(q[nextIndex]);
       },
 
       playPrev() {
@@ -309,18 +489,24 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
         }
 
         set({ currentIndex: prevIndex });
-        loadAndPlay(q[prevIndex]);
+        persistPlayerState(true);
+        void loadAndPlay(q[prevIndex]);
       },
 
       seek(time) {
-        audio.currentTime = time;
-        set({ currentTime: time });
+        const state = get();
+        const max = state.duration > 0 ? state.duration : Number.POSITIVE_INFINITY;
+        const clamped = clamp(time, 0, max);
+        audio.currentTime = clamped;
+        set({ currentTime: clamped });
+        persistPlayerState(true);
       },
 
       setVolume(vol) {
         const clamped = Math.max(0, Math.min(1, vol));
         audio.volume = clamped;
         set({ volume: clamped, isMuted: clamped === 0 });
+        persistPlayerState(true);
       },
 
       toggleMute() {
@@ -332,12 +518,14 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
           audio.volume = 0;
           set({ isMuted: true });
         }
+        persistPlayerState(true);
       },
 
       addToQueue(tracks) {
         const state = get();
         const newQueue = [...state.queue, ...tracks];
         set({ queue: newQueue, originalQueue: newQueue });
+        persistPlayerState(true);
 
         if (state.shuffleActive) {
           set({ shuffledQueue: [...state.shuffledQueue, ...tracks] });
@@ -346,7 +534,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
         // If nothing is playing, start
         if (!state.currentTrack && tracks.length > 0) {
           set({ currentIndex: newQueue.length - tracks.length });
-          loadAndPlay(tracks[0]);
+          void loadAndPlay(tracks[0]);
         }
       },
 
@@ -363,6 +551,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
         }
 
         set({ queue: q, originalQueue: q, currentIndex: newIndex });
+        persistPlayerState(true);
       },
 
       clearQueue() {
@@ -380,6 +569,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
           duration: 0,
         });
         document.title = "Moonsway";
+        persistPlayerState(true);
       },
 
       toggleShuffle() {
@@ -410,6 +600,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
             currentIndex: 0,
           });
         }
+        persistPlayerState(true);
       },
 
       cycleRepeat() {
@@ -418,6 +609,7 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
         const currentIdx = modes.indexOf(state.repeatMode);
         const next = modes[(currentIdx + 1) % modes.length];
         set({ repeatMode: next });
+        persistPlayerState(true);
       },
     };
   }

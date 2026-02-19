@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
-import { Search as SearchIcon, Loader2, Music, Disc3, User } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Link, useParams } from "react-router";
+import { Search as SearchIcon, Music, Disc3, User } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackList } from "@/components/track-list";
@@ -15,18 +14,26 @@ import {
 } from "@/lib/api/music-api";
 import type { Track, Album, ArtistMinified } from "@/types/music";
 
-const DEBOUNCE_MS = 300;
+const CURRENT_SEARCH_KEY = "moonsway-current-search";
+
+function readCurrentSearchQuery(): string {
+  try {
+    return localStorage.getItem(CURRENT_SEARCH_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 export function SearchPage() {
-  const [query, setQuery] = useState("");
+  const { query: urlQuery } = useParams<{ query: string }>();
   const [isLoading, setIsLoading] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [artists, setArtists] = useState<ArtistMinified[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [activeQuery, setActiveQuery] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const playTrack = usePlayerStore((s) => s.playTrack);
 
@@ -39,7 +46,6 @@ export function SearchPage() {
       return;
     }
 
-    // Cancel previous request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -55,6 +61,7 @@ export function SearchPage() {
       ]);
 
       if (!controller.signal.aborted) {
+        console.log("[Search] Track results sample:", trackRes.items[0]);
         setTracks(trackRes.items);
         setAlbums(albumRes.items);
         setArtists(artistRes.items);
@@ -70,15 +77,21 @@ export function SearchPage() {
   }, []);
 
   useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      performSearch(query);
-    }, DEBOUNCE_MS);
+    const fallbackQuery = readCurrentSearchQuery();
+    const effectiveQuery = (urlQuery ?? fallbackQuery).trim();
 
-    return () => clearTimeout(debounceRef.current);
-  }, [query, performSearch]);
+    if (effectiveQuery) {
+      setActiveQuery(effectiveQuery);
+      performSearch(effectiveQuery);
+    } else {
+      setTracks([]);
+      setAlbums([]);
+      setArtists([]);
+      setHasSearched(false);
+      setActiveQuery("");
+    }
+  }, [urlQuery, performSearch]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -94,22 +107,6 @@ export function SearchPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Search bar */}
-      <div className="relative max-w-xl">
-        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="Search for tracks, albums, or artists..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-9"
-          autoFocus
-        />
-        {isLoading && (
-          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        )}
-      </div>
-
       {/* Results */}
       {!hasSearched ? (
         <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
@@ -120,7 +117,7 @@ export function SearchPage() {
         <SearchSkeleton />
       ) : tracks.length === 0 && albums.length === 0 && artists.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-          <p className="text-sm">No results found for "{query}"</p>
+          <p className="text-sm">No results found for "{activeQuery}"</p>
         </div>
       ) : (
         <Tabs defaultValue="tracks" className="flex-1">

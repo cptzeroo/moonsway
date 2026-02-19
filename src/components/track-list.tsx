@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Play, Pause, Heart } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useLibraryStore } from "@/stores/library-store";
@@ -16,6 +17,9 @@ export function TrackList({ tracks, onPlay }: TrackListProps) {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const toggleFavoriteTrack = useLibraryStore((s) => s.toggleFavoriteTrack);
   const isTrackFavorited = useLibraryStore((s) => s.isTrackFavorited);
+  const [failedCoverIds, setFailedCoverIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   return (
     <div className="flex flex-col">
@@ -33,8 +37,9 @@ export function TrackList({ tracks, onPlay }: TrackListProps) {
         const isCurrent = currentTrack?.id === track.id;
         const isFav = isTrackFavorited(track.id);
         const coverUrl = track.album?.cover
-          ? getCoverUrl(track.album.cover, "40")
+          ? getCoverUrl(track.album.cover, "320")
           : "";
+        const canShowCover = Boolean(coverUrl) && !failedCoverIds.has(track.id);
 
         return (
           <div
@@ -70,11 +75,20 @@ export function TrackList({ tracks, onPlay }: TrackListProps) {
               onClick={() => onPlay(track, index)}
               className="flex min-w-0 items-center gap-3 text-left"
             >
-              {coverUrl ? (
+              {canShowCover ? (
                 <img
                   src={coverUrl}
                   alt=""
                   className="size-8 shrink-0 rounded object-cover"
+                  loading="lazy"
+                  onError={() => {
+                    setFailedCoverIds((prev) => {
+                      if (prev.has(track.id)) return prev;
+                      const next = new Set(prev);
+                      next.add(track.id);
+                      return next;
+                    });
+                  }}
                 />
               ) : (
                 <div className="size-8 shrink-0 rounded bg-muted" />

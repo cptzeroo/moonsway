@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev --no-watch"
   },
   "dependencies": {
     "@tauri-apps/plugin-shell": "^2.3.5",
