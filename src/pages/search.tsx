@@ -61,10 +61,15 @@ export function SearchPage() {
       ]);
 
       if (!controller.signal.aborted) {
-        console.log("[Search] Track results sample:", trackRes.items[0]);
+        const artistsWithPicture = artistRes.items.filter((artist) =>
+          Boolean(artist.picture)
+        );
+
         setTracks(trackRes.items);
         setAlbums(albumRes.items);
-        setArtists(artistRes.items);
+        setArtists(
+          artistsWithPicture.length > 0 ? artistsWithPicture : artistRes.items
+        );
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;

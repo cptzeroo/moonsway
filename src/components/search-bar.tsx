@@ -53,7 +53,9 @@ export function SearchBar() {
   const location = useLocation();
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showRecentDropdown, setShowRecentDropdown] = useState(false);
   const [recentQueries, setRecentQueries] = useState<string[]>(() => readRecentQueries());
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -83,10 +85,26 @@ export function SearchBar() {
       event.preventDefault();
       inputRef.current?.focus();
       inputRef.current?.select();
+      if (!query.trim()) {
+        setShowRecentDropdown(true);
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [query]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (!containerRef.current?.contains(target)) {
+        setShowRecentDropdown(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, []);
 
   useEffect(() => {
@@ -132,6 +150,9 @@ export function SearchBar() {
   const handleClear = () => {
     setQuery("");
     persistCurrentSearch("");
+    if (inputRef.current === document.activeElement && recentQueries.length > 0) {
+      setShowRecentDropdown(true);
+    }
     if (location.pathname.startsWith("/search")) {
       navigate("/search");
     }
@@ -144,6 +165,7 @@ export function SearchBar() {
     navigate(`/search/${encodeURIComponent(normalized)}`);
     saveRecentQuery(normalized);
     persistCurrentSearch(normalized);
+    setShowRecentDropdown(false);
     setIsLoading(false);
   };
 
@@ -152,75 +174,97 @@ export function SearchBar() {
     navigate(`/search/${encodeURIComponent(recentQuery)}`);
     saveRecentQuery(recentQuery);
     persistCurrentSearch(recentQuery);
+    setShowRecentDropdown(false);
   };
 
   const handleClearRecentQueries = () => {
     setRecentQueries([]);
     clearRecentQueriesStorage();
+    setShowRecentDropdown(false);
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col gap-2">
-      <form className="relative w-full" onSubmit={handleSubmit}>
-        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          ref={inputRef}
-          type="text"
-          placeholder="Search for tracks, albums, or artists..."
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            persistCurrentSearch(e.target.value);
-          }}
-          className="h-11 rounded-xl border-border/60 bg-card/70 pl-9 pr-10"
-        />
-        {isLoading && (
-          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        )}
-        {!isLoading && query && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        )}
-        {!isLoading && !query && (
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border/80 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            /
-          </kbd>
-        )}
-      </form>
-
-      {!query && recentQueries.length > 0 && (
-        <div className="flex flex-col gap-2 px-1">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Recent
-            </span>
+      <div ref={containerRef} className="relative w-full">
+        <form className="relative w-full" onSubmit={handleSubmit}>
+          <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={inputRef}
+            type="text"
+            placeholder="Search for tracks, albums, or artists..."
+            value={query}
+            onFocus={() => {
+              if (!query.trim() && recentQueries.length > 0) {
+                setShowRecentDropdown(true);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setShowRecentDropdown(false);
+                inputRef.current?.blur();
+              }
+            }}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setQuery(nextValue);
+              persistCurrentSearch(nextValue);
+              if (nextValue.trim()) {
+                setShowRecentDropdown(false);
+              } else if (document.activeElement === inputRef.current && recentQueries.length > 0) {
+                setShowRecentDropdown(true);
+              }
+            }}
+            className="h-11 rounded-xl border-border/60 bg-card/70 pl-9 pr-10"
+          />
+          {isLoading && (
+            <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+          {!isLoading && query && (
             <button
               type="button"
-              onClick={handleClearRecentQueries}
-              className="text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={handleClear}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
             >
-              Clear all
+              <X className="size-4" />
             </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {recentQueries.map((item) => (
+          )}
+          {!isLoading && !query && (
+            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border/80 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              /
+            </kbd>
+          )}
+        </form>
+
+        {showRecentDropdown && !query && recentQueries.length > 0 && (
+          <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 rounded-xl border border-border/70 bg-card/95 p-2 shadow-lg backdrop-blur-md">
+            <div className="mb-1.5 flex items-center justify-between px-2">
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Recent
+              </span>
               <button
-                key={item}
                 type="button"
-                onClick={() => handleRecentClick(item)}
-                className="rounded-full border border-border/80 bg-card/70 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+                onClick={handleClearRecentQueries}
+                className="text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
-                {item}
+                Clear all
               </button>
-            ))}
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {recentQueries.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => handleRecentClick(item)}
+                  className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-foreground/90 transition-colors hover:bg-accent/60"
+                >
+                  <SearchIcon className="mr-2 size-3.5 text-muted-foreground" />
+                  <span className="truncate">{item}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

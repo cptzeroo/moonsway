@@ -44,8 +44,6 @@ export async function fetchWithRetry(
     try {
       const response = await fetch(url, { signal: options.signal });
 
-      console.log("response", response);
-
       if (response.status === 429) {
         console.warn(`[API] Rate limit on ${baseUrl}, trying next...`);
         instanceIndex++;
