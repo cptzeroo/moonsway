@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Play,
   Pause,
@@ -53,6 +53,32 @@ export function PlayerBar() {
 
   const RepeatIcon = repeatMode === "one" ? Repeat1 : Repeat;
   const progressValue = isScrubbing ? scrubTime : currentTime;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || event.repeat) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTypingTarget =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable;
+      const isInteractiveTarget =
+        tag === "BUTTON" ||
+        tag === "A" ||
+        Boolean(target?.closest("[role='button'],[role='link']"));
+
+      if (isTypingTarget || isInteractiveTarget) return;
+
+      event.preventDefault();
+      togglePlayPause();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [togglePlayPause]);
 
   return (
     <footer className="flex h-24 items-center border-t border-border/70 bg-card/88 px-5 shadow-[0_-3px_10px_rgba(0,0,0,0.18)]">

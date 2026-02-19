@@ -28,7 +28,7 @@ export function HomePage() {
       <section>
         <h1 className="text-3xl font-semibold tracking-tight">Welcome to Moonsway</h1>
         <p className="mt-2 text-base text-muted-foreground">
-          Lightweight, offline-first lossless music streaming.
+          High fidelity music streaming. Press play with Moonsway.
         </p>
       </section>
 
