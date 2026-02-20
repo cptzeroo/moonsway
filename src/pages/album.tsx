@@ -20,8 +20,8 @@ export function AlbumPage() {
 
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playQueue = usePlayerStore((s) => s.playQueue);
+  const favoriteAlbums = useLibraryStore((s) => s.favoriteAlbums);
   const toggleFavoriteAlbum = useLibraryStore((s) => s.toggleFavoriteAlbum);
-  const isAlbumFavorited = useLibraryStore((s) => s.isAlbumFavorited);
 
   useEffect(() => {
     if (!id) return;
@@ -81,6 +81,7 @@ export function AlbumPage() {
 
   const coverUrl = album.cover ? getCoverUrl(album.cover, "640") : "";
   const totalDuration = tracks.reduce((sum, t) => sum + t.duration, 0);
+  const isFav = favoriteAlbums.some((item) => item.id === album.id);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -157,9 +158,7 @@ export function AlbumPage() {
             <Heart
               className={cn(
                 "size-5 transition-colors",
-                isAlbumFavorited(album.id)
-                  ? "fill-primary text-primary"
-                  : "text-muted-foreground"
+                isFav ? "fill-primary text-primary" : "text-muted-foreground"
               )}
             />
           </button>

@@ -23,8 +23,8 @@ export function ArtistPage() {
 
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playQueue = usePlayerStore((s) => s.playQueue);
+  const favoriteArtists = useLibraryStore((s) => s.favoriteArtists);
   const toggleFavoriteArtist = useLibraryStore((s) => s.toggleFavoriteArtist);
-  const isArtistFavorited = useLibraryStore((s) => s.isArtistFavorited);
 
   useEffect(() => {
     if (!id) return;
@@ -86,6 +86,7 @@ export function ArtistPage() {
   const pictureUrl = artist.picture
     ? getArtistPictureUrl(artist.picture, "640")
     : "";
+  const isFav = favoriteArtists.some((item) => item.id === artist.id);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -134,9 +135,7 @@ export function ArtistPage() {
           <Heart
             className={cn(
               "size-5 transition-colors",
-              isArtistFavorited(artist.id)
-                ? "fill-primary text-primary"
-                : "text-muted-foreground"
+              isFav ? "fill-primary text-primary" : "text-muted-foreground"
             )}
           />
         </button>

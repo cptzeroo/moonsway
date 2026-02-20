@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Play, Pause, Heart } from "lucide-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useLibraryStore } from "@/stores/library-store";
@@ -15,10 +15,14 @@ interface TrackListProps {
 export function TrackList({ tracks, onPlay }: TrackListProps) {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const favoriteTracks = useLibraryStore((s) => s.favoriteTracks);
   const toggleFavoriteTrack = useLibraryStore((s) => s.toggleFavoriteTrack);
-  const isTrackFavorited = useLibraryStore((s) => s.isTrackFavorited);
   const [failedCoverIds, setFailedCoverIds] = useState<Set<string>>(
     () => new Set()
+  );
+  const favoriteTrackIds = useMemo(
+    () => new Set(favoriteTracks.map((track) => track.id)),
+    [favoriteTracks]
   );
 
   return (
@@ -35,7 +39,7 @@ export function TrackList({ tracks, onPlay }: TrackListProps) {
       {/* Rows */}
       {tracks.map((track, index) => {
         const isCurrent = currentTrack?.id === track.id;
-        const isFav = isTrackFavorited(track.id);
+        const isFav = favoriteTrackIds.has(track.id);
         const coverUrl = track.album?.cover
           ? getCoverUrl(track.album.cover, "320")
           : "";
